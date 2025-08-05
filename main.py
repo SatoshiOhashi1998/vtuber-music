@@ -1,7 +1,7 @@
 import os
 import re
-import shutil
 import time
+import shutil
 import pandas as pd
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
@@ -26,6 +26,13 @@ def extract_number_from_title(title):
     match = re.search(r'(\d+)$', title)
     return int(match.group(1)) if match else -1
 
+def normalize_playlist_id(pid):
+    """URLからplaylist IDを抽出、すでにID形式ならそのまま"""
+    return pid.split('list=')[1] if isinstance(pid, str) and 'list=' in pid else pid
+
+def to_playlist_url(playlist_id):
+    """playlist IDからURLを生成"""
+    return f"https://www.youtube.com/playlist?list={playlist_id}"
 
 # ----------------------------------------
 # YouTube API 操作
@@ -59,7 +66,6 @@ def get_playlists(api_key, channel_id):
 
     return playlists
 
-
 # ----------------------------------------
 # CSV操作
 # ----------------------------------------
@@ -67,11 +73,11 @@ def get_playlists(api_key, channel_id):
 def update_csv_counts(csv_path, youtube_playlists):
     """CSV内のcount列をYouTube上の実数で更新"""
     df = pd.read_csv(csv_path)
-    df['playlist_id'] = df['url'].apply(lambda url: url.split('list=')[1] if 'list=' in url else '')
+    df['playlist_id'] = df['url'].apply(normalize_playlist_id)
     playlist_map = {p['playlist_id']: p['video_count'] for p in youtube_playlists}
 
     def update_count(row):
-        return playlist_map.get(row['playlist_id'], row['count'])  # 一致するIDがなければ現状維持
+        return playlist_map.get(row['playlist_id'], row['count'])
 
     df['count'] = df.apply(update_count, axis=1)
     df.drop(columns=['playlist_id'], inplace=True)
@@ -79,16 +85,11 @@ def update_csv_counts(csv_path, youtube_playlists):
 
     print('✅ count を更新しました')
 
-
 # ----------------------------------------
 # データ取得・比較処理
 # ----------------------------------------
 
 def fetch_playlist_data(playlist):
-    """
-    プレイリスト内の動画情報を取得し、MAIN_DATA_CSVに追記する。
-    CSV列: id, title, channel, date, url, playlist
-    """
     youtube = build('youtube', 'v3', developerKey=API_KEY)
     playlist_id = playlist['playlist_id']
     playlist_title = playlist['title']
@@ -103,13 +104,13 @@ def fetch_playlist_data(playlist):
             pageToken=nextPageToken
         )
         response = request.execute()
-        time.sleep(1)  # APIアクセス間隔を空ける
+        time.sleep(1)
 
         for item in response['items']:
             snippet = item['snippet']
             video_id = snippet['resourceId']['videoId']
             video_title = snippet['title']
-            channel_title = snippet['videoOwnerChannelTitle'] if 'videoOwnerChannelTitle' in snippet else snippet['channelTitle']
+            channel_title = snippet.get('videoOwnerChannelTitle', snippet.get('channelTitle', ''))
             published_at = snippet['publishedAt']
             video_url = f'https://www.youtube.com/watch?v={video_id}'
 
@@ -125,7 +126,6 @@ def fetch_playlist_data(playlist):
         if not nextPageToken:
             break
 
-    # 既存データ読み込みとid付与
     if os.path.exists(MAIN_DATA_CSV):
         df_existing = pd.read_csv(MAIN_DATA_CSV)
         max_id = df_existing['id'].max() if not df_existing.empty else 0
@@ -133,29 +133,22 @@ def fetch_playlist_data(playlist):
         df_existing = pd.DataFrame()
         max_id = 0
 
-    # 新規動画データDataFrame作成
     df_new = pd.DataFrame(videos)
     df_new.insert(0, 'id', range(max_id + 1, max_id + 1 + len(df_new)))
 
-    # 既存と新規を結合し保存（追記）
-    if not df_existing.empty:
-        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-    else:
-        df_combined = df_new
-
+    df_combined = pd.concat([df_existing, df_new], ignore_index=True) if not df_existing.empty else df_new
     df_combined.to_csv(MAIN_DATA_CSV, index=False)
 
     print(f"✅ プレイリスト『{playlist_title}』の動画データを {MAIN_DATA_CSV} に追記しました（{len(df_new)}件）")
 
     if os.path.exists(PLAYLISTS_CSV):
         df_playlists = pd.read_csv(PLAYLISTS_CSV)
+        df_playlists['playlist_id'] = df_playlists['playlist_id'].apply(normalize_playlist_id)
     else:
         df_playlists = pd.DataFrame(columns=['title', 'playlist_id', 'video_count'])
 
-    # video_count は今回取得動画数
     video_count = len(videos)
 
-    # 既存にプレイリストがあれば更新、なければ追加
     if playlist_id in df_playlists['playlist_id'].values:
         df_playlists.loc[df_playlists['playlist_id'] == playlist_id, ['title', 'video_count']] = [playlist_title, video_count]
     else:
@@ -165,18 +158,15 @@ def fetch_playlist_data(playlist):
             'video_count': video_count
         }])], ignore_index=True)
 
+    # ✅ 保存前に playlist_id を URL形式に戻す
+    df_playlists['playlist_id'] = df_playlists['playlist_id'].apply(to_playlist_url)
     df_playlists.to_csv(PLAYLISTS_CSV, index=False)
 
     print(f"✅ プレイリスト情報を {PLAYLISTS_CSV} に更新しました")
 
-
-
 def identify_and_fetch_target_playlists(youtube_playlists, csv_path):
-    """
-    CSVに存在しない、または count が一致しないプレイリストに対してデータ取得を行う
-    """
     df = pd.read_csv(csv_path)
-    df['playlist_id'] = df['url'].apply(lambda url: url.split('list=')[1] if 'list=' in url else '')
+    df['playlist_id'] = df['playlist_id'].apply(normalize_playlist_id)
     csv_map = df.set_index('playlist_id').to_dict(orient='index')
 
     for playlist in youtube_playlists:
@@ -187,18 +177,17 @@ def identify_and_fetch_target_playlists(youtube_playlists, csv_path):
         if csv_entry is None:
             print(f"🆕 CSVに存在しないプレイリスト: {playlist['title']}")
             fetch_playlist_data(playlist)
-        elif youtube_count != csv_entry['count']:
-            print(f"⚠️ count不一致: {playlist['title']}（CSV: {csv_entry['count']} → YouTube: {youtube_count}）")
+        elif youtube_count != csv_entry['video_count']:
+            print(f"⚠️ count不一致: {playlist['title']}（CSV: {csv_entry['video_count']} → YouTube: {youtube_count}）")
             fetch_playlist_data(playlist)
 
-
 def check_csv_latest_playlist(youtube_playlists, csv_path):
-    """CSV上の最新プレイリストがYouTubeと一致するか確認"""
     df = pd.read_csv(csv_path)
+    df['playlist_id'] = df['playlist_id'].apply(normalize_playlist_id)
     df['number'] = df['title'].apply(extract_number_from_title)
     latest_row = df.loc[df['number'].idxmax()]
     latest_title = latest_row['title']
-    csv_count = latest_row['count']
+    csv_count = latest_row['video_count']
 
     print(f"🗂️ CSV上の最新プレイリスト: {latest_title}（count: {csv_count}）")
 
@@ -220,43 +209,27 @@ def clean_and_sort_main_data():
 
     df = pd.read_csv(MAIN_DATA_CSV)
     before_count = len(df)
-
-    # 重複削除（URL基準）
     df = df.drop_duplicates(subset='url')
-
-    # 新しい順（最新が上）に並び替え
     df = df.sort_values(by='date', ascending=False).reset_index(drop=True)
 
-    # 既存の id 列があれば削除
     if 'id' in df.columns:
         df = df.drop(columns=['id'])
 
-    # id を再付与（1スタート）
     df.insert(0, 'id', range(1, len(df) + 1))
-
-    # 保存
     df.to_csv(MAIN_DATA_CSV, index=False)
-
     after_count = len(df)
+
     print(f"🧹 main-data.csv を整理しました（{before_count} → {after_count}件、最新順・重複削除）")
 
-
 def filter_checked_channels(output_csv=FILTERED_DATA_CSV, verbose=True):
-    """checkが1のチャンネルに該当する動画のみを抽出し、CSVに出力"""
     if not os.path.exists(MAIN_DATA_CSV) or not os.path.exists(CATEGORIZE_CSV):
         print("❌ 必要なCSVファイルが存在しません")
         return
 
     df_main = pd.read_csv(MAIN_DATA_CSV)
     df_categorize = pd.read_csv(CATEGORIZE_CSV)
-
-    # check == 1 のチャンネルを抽出
     checked_channels = df_categorize[df_categorize['check'] == 1]['channel'].unique()
-
-    # mainデータから該当チャンネルのみ抽出
     df_filtered = df_main[df_main['channel'].isin(checked_channels)]
-
-    # 結果をCSVに出力
     df_filtered.to_csv(output_csv, index=False)
 
     if verbose:
@@ -278,16 +251,11 @@ def main():
     clean_and_sort_main_data()
     filter_checked_channels()
 
-    if os.path.exists(FILTERED_DATA_CSV) and OUTPUT_PATH:
-        try:
-            shutil.copy(FILTERED_DATA_CSV, OUTPUT_PATH)
-            print(f"📁 {FILTERED_DATA_CSV} を {OUTPUT_PATH} にコピーしました")
-        except Exception as e:
-            print(f"❌ ファイルコピー中にエラーが発生しました: {e}")
-    else:
-        print("⚠️ コピー元ファイルが存在しないか、出力先パスが指定されていません")
-
+    try:
+        shutil.copy(FILTERED_DATA_CSV, OUTPUT_PATH)
+        print(f"✅ {FILTERED_DATA_CSV} を {OUTPUT_PATH} にコピーしました。")
+    except Exception as e:
+        print(f"❌ コピーに失敗しました: {e}")
 
 if __name__ == '__main__':
     main()
-    # filter_checked_channels()
