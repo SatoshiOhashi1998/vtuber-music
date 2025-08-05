@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import time
 import pandas as pd
 from googleapiclient.discovery import build
@@ -14,6 +15,7 @@ PLAYLISTS_CSV = os.getenv('PLAYLISTS_CSV')
 MAIN_DATA_CSV = os.getenv('MAIN_DATA_CSV')
 CATEGORIZE_CSV = os.getenv('CATEGORIZE_CSV')
 FILTERED_DATA_CSV = os.getenv('FILTERED_DATA_CSV')
+OUTPUT_PATH = os.getenv('OUTPUT_PATH')
 
 # ----------------------------------------
 # ユーティリティ関数
@@ -276,7 +278,16 @@ def main():
     clean_and_sort_main_data()
     filter_checked_channels()
 
+    if os.path.exists(FILTERED_DATA_CSV) and OUTPUT_PATH:
+        try:
+            shutil.copy(FILTERED_DATA_CSV, OUTPUT_PATH)
+            print(f"📁 {FILTERED_DATA_CSV} を {OUTPUT_PATH} にコピーしました")
+        except Exception as e:
+            print(f"❌ ファイルコピー中にエラーが発生しました: {e}")
+    else:
+        print("⚠️ コピー元ファイルが存在しないか、出力先パスが指定されていません")
+
 
 if __name__ == '__main__':
-    # main()
-    filter_checked_channels()
+    main()
+    # filter_checked_channels()

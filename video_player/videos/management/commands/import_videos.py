@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from videos.models import Video  # ← 修正ここ
+from videos.models import Video
 from datetime import datetime
 import csv
 
@@ -8,7 +8,10 @@ class Command(BaseCommand):
     help = 'CSVファイルからVideoデータをインポートします（重複URLはスキップ）'
 
     def add_arguments(self, parser):
-        parser.add_argument('csv_file', type=str, help='CSVファイルへのパス')
+        parser.add_argument(
+            '--csv-file', type=str,
+            default=r'C:\Users\user\PycharmProjects\MyUtilProject\MyApp\vtuber-music\video_player\videos\data\filtered_data.csv', help='CSVファイルへのパス'
+            )
 
     def handle(self, *args, **kwargs):
         csv_file = kwargs['csv_file']
