@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-3xl mx-auto p-6 bg-white rounded-lg shadow">
+  <h2 class="text-2xl font-semibold mb-6 text-gray-800">🎼 プレイリスト一覧</h2>
+
+  <ul class="space-y-4 mb-8">
+    {% for playlist in playlists %}
+    <li class="flex flex-col md:flex-row md:items-center md:justify-between bg-gray-50 p-4 rounded shadow-sm">
+      <div class="flex items-center space-x-3 mb-2 md:mb-0">
+        <a href="{% url 'playlist_detail' playlist.pk %}" class="text-blue-600 hover:underline text-lg font-medium">
+          {{ playlist.name }}
+        </a>
+      </div>
+      <div class="flex items-center space-x-2">
+        <form action="{% url 'playlist_edit' playlist.pk %}" method="post" class="flex items-center space-x-2">
+          {% csrf_token %}
+          <input type="text" name="name" value="{{ playlist.name }}"
+            class="border rounded px-2 py-1 text-sm w-36">
+          <button type="submit"
+            class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded">変更</button>
+        </form>
+        <form action="{% url 'playlist_delete' playlist.pk %}" method="post">
+          {% csrf_token %}
+          <button type="submit"
+            class="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded">削除</button>
+        </form>
+      </div>
+    </li>
+    {% empty %}
+    <li class="text-gray-500">まだプレイリストがありません。</li>
+    {% endfor %}
+  </ul>
+
+  <h3 class="text-xl font-semibold mb-2 text-gray-700">🆕 新規プレイリスト作成</h3>
+  <form method="post" class="flex items-center space-x-2">
+    {% csrf_token %}
+    {{ form.name }}
+    <button type="submit" name="create"
+      class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">作成</button>
+  </form>
+</div>
+{% endblock %}

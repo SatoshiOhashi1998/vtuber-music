@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}動画検索 - VTuber Music Videos{% endblock %}
+
+{% block content %}
+
+<form method="get" id="search_form" style="background:#fff; padding:20px 25px; border-radius:12px; box-shadow:0 6px 15px rgb(0 0 0 / 0.1); display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start;">
+    <div class="form-group" style="flex:1 1 150px; min-width:150px; display:flex; flex-direction:column;">
+        <label for="title" style="font-size:12px; font-weight:600; color:#555; margin-bottom:6px; user-select:none;">タイトルで検索</label>
+        <input type="text" id="title" name="title" placeholder="タイトルで検索" value="{{ request.GET.title }}" style="padding:10px 14px; font-size:14px; border:1.8px solid #ddd; border-radius:8px; outline:none;">
+    </div>
+
+    <div class="form-group" style="flex:1 1 150px; min-width:150px; display:flex; flex-direction:column;">
+        <label for="channel" style="font-size:12px; font-weight:600; color:#555; margin-bottom:6px; user-select:none;">チャンネルを検索または選択</label>
+        <input list="channels_list" id="channel" name="channel" placeholder="チャンネル名" value="{{ request.GET.channel }}" style="padding:10px 14px; font-size:14px; border:1.8px solid #ddd; border-radius:8px; outline:none;">
+        <datalist id="channels_list">
+            {% for ch in channels %}
+            <option value="{{ ch }}">
+                {% endfor %}
+            </datalist>
+        </div>
+
+        <div class="form-group" style="flex:1 1 150px; min-width:150px; display:flex; flex-direction:column;">
+            <label for="start_date" style="font-size:12px; font-weight:600; color:#555; margin-bottom:6px; user-select:none;">開始日</label>
+            <input type="date" id="start_date" name="start_date" value="{{ request.GET.start_date }}" style="padding:10px 14px; font-size:14px; border:1.8px solid #ddd; border-radius:8px; outline:none;">
+        </div>
+
+        <div class="form-group" style="flex:1 1 150px; min-width:150px; display:flex; flex-direction:column;">
+            <label for="end_date" style="font-size:12px; font-weight:600; color:#555; margin-bottom:6px; user-select:none;">終了日</label>
+            <input type="date" id="end_date" name="end_date" value="{{ request.GET.end_date }}" style="padding:10px 14px; font-size:14px; border:1.8px solid #ddd; border-radius:8px; outline:none;">
+        </div>
+
+        <input type="submit" value="検索" style="background-color:#007bff; color:white; border:none; padding:12px 25px; font-size:15px; font-weight:700; border-radius:12px; cursor:pointer; box-shadow:0 5px 15px rgb(0 123 255 / 0.4); user-select:none;">
+    </form>
+
+    <div class="video-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; margin-top: 40px;">
+
+        {% for video in page_obj %}
+        <div class="video-card" style="background:white; padding:18px 20px; border-radius:14px; box-shadow:0 5px 18px rgb(0 0 0 / 0.07); transition: box-shadow 0.3s ease, transform 0.3s ease; display: flex; flex-direction: column; gap: 12px;">
+
+            <div class="video-title" style="font-weight:700; margin:0 0 10px; font-size:17px;">
+                <a href="{% url 'video_player' video.pk %}" style="text-decoration:none; color:#222;">{{ video.title }}</a>
+            </div>
+            <div class="video-meta" style="color:#666; font-size:13px; line-height:1.5;">
+                チャンネル: {{ video.channel }}<br>
+                投稿日: {{ video.date|date:"Y-m-d H:i" }}<br>
+                プレイリスト: {{ video.playlist }}
+            </div>
+        </div>
+        {% empty %}
+        <p>動画が見つかりませんでした。</p>
+        {% endfor %}
+
+    </div>
+
+    <script>
+        document.getElementById('search_form').addEventListener('submit', function(event) {
+            const title = document.getElementById('title').value.trim();
+            const channel = document.getElementById('channel').value.trim();
+            const startDate = document.getElementById('start_date').value.trim();
+            const endDate = document.getElementById('end_date').value.trim();
+
+            if (!title && !channel && !startDate && !endDate) {
+        event.preventDefault(); // フォーム送信を止める
+        // alert('検索条件を少なくとも一つ入力してください。');
+    }
+});
+
+// 複数の追加フォームにAJAX処理を設定
+        document.querySelectorAll('.add-to-playlist-form').forEach(form => {
+          form.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const videoId = this.dataset.videoId;
+            const playlistSelect = this.querySelector('select[name="playlist_id"]');
+            const playlistId = playlistSelect.value;
+            const csrfToken = this.querySelector('[name=csrfmiddlewaretoken]').value;
+            const url = "{% url 'ajax_add_to_playlist' 0 %}".replace('0', videoId);
+
+            fetch(url, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({playlist_id: playlistId})
+        })
+            .then(response => response.json())
+            .then(data => {
+              const msgDiv = document.getElementById('message_' + videoId);
+              if (data.success) {
+                msgDiv.style.color = 'green';
+                msgDiv.textContent = data.message;
+            } else {
+                msgDiv.style.color = 'red';
+                msgDiv.textContent = data.message;
+            }
+        })
+            .catch(() => {
+              const msgDiv = document.getElementById('message_' + videoId);
+              msgDiv.style.color = 'red';
+              msgDiv.textContent = '通信エラーが発生しました。';
+          });
+        });
+      });
+  </script>
+
+  {% endblock %}

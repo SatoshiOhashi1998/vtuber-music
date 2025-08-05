@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}{{ video.title }} - VTuber Music Videos{% endblock %}
+
+{% block content %}
+
+<div style="background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); max-width: 960px; margin: 30px auto;">
+    <iframe src="https://www.youtube.com/embed/{{ video.youtube_id }}" allowfullscreen style="width: 100%; height: 540px; border:none;"></iframe>
+
+    <h1 style="font-size:24px; margin-top:20px;">{{ video.title }}</h1>
+
+    <div style="color:#666; font-size:14px; margin-top:10px;">
+        チャンネル: {{ video.channel }}<br>
+        投稿日: {{ video.date|date:"Y年m月d日 H:i" }}<br>
+        プレイリスト: {{ video.playlist }}
+    </div>
+
+    <a href="{% url 'video_search' %}" style="display:inline-block; margin-top:20px; text-decoration:none; color:#007bff;">← 一覧に戻る</a>
+</div>
+
+{% if user.is_authenticated %}
+<form id="add-to-playlist-form" style="max-width: 960px; margin: 20px auto; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 12px;">
+
+  {% csrf_token %}
+
+  <label for="playlist" style="font-weight: 600; font-size: 16px; color: #333; min-width: 130px;">プレイリストに追加：</label>
+
+  <select name="playlist_id" id="playlist" required
+  style="flex: 1; padding: 8px 12px; font-size: 15px; border: 1.5px solid #ccc; border-radius: 8px; transition: border-color 0.3s ease;">
+  {% for playlist in user_playlists %}
+  <option value="{{ playlist.id }}">{{ playlist.name }}</option>
+  {% endfor %}
+</select>
+
+<button type="submit" 
+style="background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; font-size: 15px; cursor: pointer; transition: background-color 0.3s ease;">
+追加
+</button>
+
+</form>
+
+<div id="message" style="max-width: 960px; margin: 12px auto; font-weight: 700; font-size: 15px; min-height: 24px;"></div>
+
+<script>
+    document.getElementById('playlist').addEventListener('focus', function() {
+      this.style.borderColor = '#007bff';
+  });
+    document.getElementById('playlist').addEventListener('blur', function() {
+      this.style.borderColor = '#ccc';
+  });
+    document.querySelector('#add-to-playlist-form button').addEventListener('mouseenter', function() {
+      this.style.backgroundColor = '#0056b3';
+  });
+    document.querySelector('#add-to-playlist-form button').addEventListener('mouseleave', function() {
+      this.style.backgroundColor = '#007bff';
+  });
+
+    document.getElementById('add-to-playlist-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const playlistId = document.getElementById('playlist').value;
+      const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+      const url = "{% url 'ajax_add_to_playlist' video.id %}";
+
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfToken,
+          'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({playlist_id: playlistId})
+  })
+      .then(response => response.json())
+      .then(data => {
+        const msgDiv = document.getElementById('message');
+        if (data.success) {
+          msgDiv.style.color = 'green';
+          msgDiv.textContent = data.message;
+      } else {
+          msgDiv.style.color = 'red';
+          msgDiv.textContent = data.message;
+      }
+  })
+      .catch(() => {
+        const msgDiv = document.getElementById('message');
+        msgDiv.style.color = 'red';
+        msgDiv.textContent = '通信エラーが発生しました。';
+    });
+  });
+</script>
+{% endif %}
+
+{% endblock %}

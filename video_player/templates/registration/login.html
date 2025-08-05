@@ -1,0 +1,31 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ログイン</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; }
+    label { display: block; margin-top: 10px; }
+    input { width: 100%; padding: 8px; margin-top: 4px; }
+    button { margin-top: 15px; padding: 10px 20px; }
+    .error { color: red; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<h2>ログイン</h2>
+
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">ログイン</button>
+</form>
+
+{% if form.errors %}
+  <div class="error">ログインに失敗しました。ユーザー名とパスワードを確認してください。</div>
+{% endif %}
+
+</body>
+</html>

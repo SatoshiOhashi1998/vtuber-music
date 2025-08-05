@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto p-6 bg-white shadow rounded-lg">
+  <h2 class="text-2xl font-semibold mb-4">🎵 プレイリスト: {{ playlist.name }}</h2>
+
+  <!-- プレイヤー -->
+  <div id="player-container" class="mb-6">
+    <div id="player"></div>
+    <p id="video-title" class="mt-2 text-lg font-medium"></p>
+  </div>
+
+  <!-- プレイリスト動画一覧 -->
+  <ul id="playlist-videos" class="space-y-2">
+    {% for video in videos %}
+    <li data-index="{{ forloop.counter0 }}" class="cursor-pointer hover:bg-gray-100 p-2 rounded">
+      {{ video.title }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+  const videos = [
+    {% for video in videos %}
+      {
+        title: "{{ video.title|escapejs }}",
+        videoId: "{{ video.video_id }}"
+      }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  let currentIndex = {{ start_index|default:0 }};
+  let player;
+
+  // 動的にAPIを読み込む（何度でも安全に）
+  function loadYouTubeAPI() {
+    return new Promise((resolve) => {
+      if (window.YT && typeof YT.Player === 'function') {
+        resolve();
+      } else {
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        window.onYouTubeIframeAPIReady = () => {
+          resolve();
+        };
+      }
+    });
+  }
+
+  function createPlayer() {
+    player = new YT.Player('player', {
+      height: '360',
+      width: '640',
+      videoId: videos[currentIndex].videoId,
+      playerVars: {
+        autoplay: 1,
+        controls: 1,
+        rel: 0,
+        modestbranding: 1
+      },
+      events: {
+        'onReady': () => {
+          updateTitle();
+          player.playVideo();
+        },
+        'onStateChange': (event) => {
+          if (event.data === YT.PlayerState.ENDED) {
+            currentIndex++;
+            if (currentIndex < videos.length) {
+              player.loadVideoById(videos[currentIndex].videoId);
+              updateTitle();
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function updateTitle() {
+    document.getElementById('video-title').textContent = videos[currentIndex].title;
+    highlightCurrentVideo();
+  }
+
+  function highlightCurrentVideo() {
+    const items = document.querySelectorAll('#playlist-videos li');
+    items.forEach((el, index) => {
+      el.classList.toggle('bg-blue-100', index === currentIndex);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    // プレイリスト項目のクリック
+    document.querySelectorAll('#playlist-videos li').forEach(item => {
+      item.addEventListener('click', () => {
+        const index = parseInt(item.getAttribute('data-index'));
+        currentIndex = index;
+        player.loadVideoById(videos[currentIndex].videoId);
+        updateTitle();
+      });
+    });
+
+    await loadYouTubeAPI();
+    createPlayer();
+  });
+</script>
+
+{% endblock %}
